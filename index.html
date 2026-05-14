@@ -320,15 +320,17 @@ const capitalRef=ref(db,'capital');
 
 onValue(stockRef,snap=>{
   const val=snap.val();
-  if(val){ DATA=Array.isArray(val)?val:Object.values(val); }
-  else { DATA=defaultData(); set(stockRef,DATA); }
-  // Reset vendu/reserve in DATA — journal is the single source of truth
-  DATA.forEach(m=>{
-    TAILLES.forEach(t=>{
-      m.vendu[t]=0;
-      m.reserve[t]=0;
-    });
-  });
+  if(val){
+    const arr=Array.isArray(val)?val:Object.values(val);
+    // Keep only stock field, ignore vendu/reserve (journal is source of truth)
+    DATA=arr.map(m=>({
+      nom:m.nom,
+      stock:Object.fromEntries(TAILLES.map(t=>[t,parseInt(m.stock[t])||1]))
+    }));
+  } else {
+    DATA=defaultData();
+    set(stockRef,DATA);
+  }
   document.getElementById('loader').style.display='none';
   renderKPI(); renderStock();
 });
@@ -353,17 +355,24 @@ function saveStock(){
 }
 function addJournal(entry){ push(journalRef,entry); }
 
-function tStock(m){return TAILLES.reduce((s,t)=>s+m.stock[t],0);}
+// Stock initial par taille (jamais modifié)
+function tStock(m){return TAILLES.reduce((s,t)=>s+(parseInt(m.stock[t])||0),0);}
 
-// Tout calculé depuis JOURNAL par modèle+taille
-function jVendu(nom,t){return JOURNAL.filter(j=>j.type==='vente'&&j.modele===nom&&j.taille===t).reduce((s,j)=>s+(parseInt(j.qte)||1),0);}
-function jRes(nom,t){
-  const r=JOURNAL.filter(j=>j.type==='reserve'&&j.modele===nom&&j.taille===t).reduce((s,j)=>s+(parseInt(j.qte)||1),0);
-  const a=JOURNAL.filter(j=>j.type==='annul'&&j.modele===nom&&j.taille===t).reduce((s,j)=>s+(parseInt(j.qte)||1),0);
-  return Math.max(0,r-a);
+// Mouvements depuis JOURNAL uniquement — source de vérité absolue
+function jCount(nom,t,types){
+  return JOURNAL
+    .filter(j=>types.includes(j.type)&&j.modele===nom&&(t?j.taille===t:true))
+    .reduce((s,j)=>s+(parseInt(j.qte)||1),0);
 }
-function jExp(nom,t){return JOURNAL.filter(j=>j.type==='expedie'&&j.modele===nom&&j.taille===t).reduce((s,j)=>s+(parseInt(j.qte)||1),0);}
-function dispo(m,t){return Math.max(0,m.stock[t]-jVendu(m.nom,t)-jRes(m.nom,t)-jExp(m.nom,t));}
+function jVendu(nom,t){return jCount(nom,t,['vente']);}
+function jRes(nom,t){return Math.max(0, jCount(nom,t,['reserve']) - jCount(nom,t,['annul']));}
+function jExp(nom,t){return jCount(nom,t,['expedie']);}
+
+// Dispo = stock initial - vendus - réservés - expédiés
+function dispo(m,t){
+  const s=parseInt(m.stock[t])||0;
+  return Math.max(0, s - jVendu(m.nom,t) - jRes(m.nom,t) - jExp(m.nom,t));
+}
 function tDispo(m){return TAILLES.reduce((s,t)=>s+dispo(m,t),0);}
 function tVendu(m){return TAILLES.reduce((s,t)=>s+jVendu(m.nom,t),0);}
 function tRes(m){return TAILLES.reduce((s,t)=>s+jRes(m.nom,t),0);}
@@ -480,8 +489,9 @@ window.toggleDetail=function(ri){
   btn.textContent=isOpen?'▾ Détail':'▴ Fermer';
 };
 
-window.upd=function(ri,field,taille,val){
-  DATA[ri][field][taille]=Math.max(0,parseInt(val)||0);
+window.upd=function(ri,taille,val){
+  // Only stock field is editable
+  DATA[ri].stock[taille]=Math.max(0,parseInt(val)||0);
   saveStock(); renderKPI(); renderStock();
 };
 
