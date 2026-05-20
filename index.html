@@ -323,6 +323,7 @@ function syncIndicator(on){
 }
 
 let DATA=[], JOURNAL=[], CAPITAL=[];
+const NOMS_DEFAULT=["Verdana","Ivory Dune","Léopard Chic","Modèle Riviera","Black Wave","Blue Sea","Modèle Infinity","Modèle Mejestic","Orchidée Royale","Perla Noire","Marvea","Azura","Navy Oasis","Playa"];
 
 const stockRef=ref(db,'stock');
 const journalRef=ref(db,'journal');
@@ -435,8 +436,7 @@ function renderParTaille(){
   if(!t){vue.style.display='none';document.getElementById('modelsGrid').style.display='grid';return;}
   document.getElementById('modelsGrid').style.display='none';
   vue.style.display='block';
-  const NOMS=["Verdana","Ivory Dune","Léopard Chic","Modèle Riviera","Black Wave","Blue Sea","Modèle Infinity","Modèle Mejestic","Orchidée Royale","Perla Noire","Marvea","Azura","Navy Oasis","Playa"];
-  const modeles=DATA.length>0?DATA:NOMS.map(nom=>({nom,stock:Object.fromEntries(TAILLES.map(tt=>[tt,1]))}));
+  const modeles=DATA.length>0?DATA:NOMS_DEFAULT.map(nom=>({nom,stock:Object.fromEntries(TAILLES.map(tt=>[tt,1]))}));
   const rows=modeles.map(m=>{
     const d=dispo(m,t);
     const v=jVendu(m.nom,t);
@@ -482,14 +482,10 @@ function renderParTaille(){
 
 function renderStock(){
   const q=document.getElementById('searchInput').value.toLowerCase();
-  const NOMS=["Verdana","Ivory Dune","Léopard Chic","Modèle Riviera","Black Wave","Blue Sea","Modèle Infinity","Modèle Mejestic","Orchidée Royale","Perla Noire","Marvea","Azura","Navy Oasis","Playa"];
   const grid=document.getElementById('modelsGrid');
-
-  // Vue par taille (filtre par taille sélectionnée)
   const tailleFilter=document.getElementById('tailleFilter')?document.getElementById('tailleFilter').value:'';
-
-  // Si pas de DATA (vide), reconstruire depuis les noms connus
-  const modeles = DATA.length>0 ? DATA : NOMS.map(nom=>({nom,stock:Object.fromEntries(TAILLES.map(t=>[t,1]))}));
+  // Toujours utiliser NOMS_DEFAULT comme base si DATA vide
+  const modeles = DATA.length>0 ? DATA : NOMS_DEFAULT.map(nom=>({nom,stock:Object.fromEntries(TAILLES.map(t=>[t,1]))}));
   const filtered = modeles.filter(m=>m.nom.toLowerCase().includes(q));
 
   if(!filtered.length){grid.innerHTML='<div class="empty">Aucun modèle trouvé.</div>';return;}
