@@ -490,7 +490,6 @@ window.toggleDetail=function(ri){
 };
 
 window.upd=function(ri,taille,val){
-  // Only stock field is editable
   DATA[ri].stock[taille]=Math.max(0,parseInt(val)||0);
   saveStock(); renderKPI(); renderStock();
 };
@@ -800,10 +799,9 @@ window.exportPDF=function(){
     <tbody>`;
 
   DATA.forEach(m => {
-    const dispos = ["S","M","L","XL","2XL","3XL"].map(t => Math.max(0, m.stock[t]-m.vendu[t]-m.reserve[t]));
+    const dispos = ["S","M","L","XL","2XL","3XL"].map(t => dispo(m,t));
     const totalD = dispos.reduce((a,b)=>a+b,0);
-    const reserves = ["S","M","L","XL","2XL","3XL"].map(t => m.reserve[t]);
-    const hasReserve = reserves.some(r=>r>0);
+    const reserves = ["S","M","L","XL","2XL","3XL"].map(t => jRes(m.nom,t));
 
     const cells = dispos.map((d,i) => {
       const r = reserves[i];
@@ -821,7 +819,7 @@ window.exportPDF=function(){
 
   // Ligne total
   const totaux = ["S","M","L","XL","2XL","3XL"].map(t =>
-    DATA.reduce((s,m)=>s+Math.max(0,m.stock[t]-m.vendu[t]-m.reserve[t]),0)
+    DATA.reduce((s,m)=>s+dispo(m,t),0)
   );
   const totalGlobal = totaux.reduce((a,b)=>a+b,0);
   html += `<tr class="total-row">
@@ -844,7 +842,7 @@ window.exportPDF=function(){
 
 window.exportCSV=function(){
   const rows=[["Modèle",...TAILLES.map(t=>`Stock ${t}`),...TAILLES.map(t=>`Vendus ${t}`),...TAILLES.map(t=>`Réservés ${t}`),...TAILLES.map(t=>`Dispo ${t}`),"Total Stock","Total Vendus","Total Réservés","Total Dispo"]];
-  DATA.forEach(m=>{rows.push([m.nom,...TAILLES.map(t=>m.stock[t]),...TAILLES.map(t=>m.vendu[t]),...TAILLES.map(t=>m.reserve[t]),...TAILLES.map(t=>dispo(m,t)),tStock(m),tVendu(m),tRes(m),tDispo(m)]);});
+  DATA.forEach(m=>{rows.push([m.nom,...TAILLES.map(t=>m.stock[t]),...TAILLES.map(t=>jVendu(m.nom,t)),...TAILLES.map(t=>jRes(m.nom,t)),...TAILLES.map(t=>dispo(m,t)),tStock(m),tVendu(m),tRes(m),tDispo(m)]);});
   const csv=rows.map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
