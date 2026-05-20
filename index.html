@@ -197,8 +197,18 @@ header{background:linear-gradient(135deg,var(--pink),var(--pink2));padding:0 24p
     <span class="si">🔍</span>
     <input type="text" id="searchInput" placeholder="Rechercher un modèle…" oninput="renderStock()">
   </div>
+  <select id="tailleFilter" onchange="renderParTaille()" style="padding:8px 14px;border:2px solid var(--border);border-radius:25px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer;">
+    <option value="">📊 Vue par taille</option>
+    <option value="S">Taille S</option>
+    <option value="M">Taille M</option>
+    <option value="L">Taille L</option>
+    <option value="XL">Taille XL</option>
+    <option value="2XL">Taille 2XL</option>
+    <option value="3XL">Taille 3XL</option>
+  </select>
   <button class="btn btn-outline" onclick="exportCSV()">⬇ CSV</button>
 </div>
+<div id="vueTaille" style="display:none;padding:0 24px 14px;"></div>
 
 <div class="page active" id="page-stock">
   <div class="models-grid" id="modelsGrid"></div>
@@ -419,48 +429,130 @@ function renderKPI(){
     </div>`;
 }
 
+function renderParTaille(){
+  const t=document.getElementById('tailleFilter').value;
+  const vue=document.getElementById('vueTaille');
+  if(!t){vue.style.display='none';document.getElementById('modelsGrid').style.display='grid';return;}
+  document.getElementById('modelsGrid').style.display='none';
+  vue.style.display='block';
+  const NOMS=["Verdana","Ivory Dune","Léopard Chic","Modèle Riviera","Black Wave","Blue Sea","Modèle Infinity","Modèle Mejestic","Orchidée Royale","Perla Noire","Marvea","Azura","Navy Oasis","Playa"];
+  const modeles=DATA.length>0?DATA:NOMS.map(nom=>({nom,stock:Object.fromEntries(TAILLES.map(tt=>[tt,1]))}));
+  const rows=modeles.map(m=>{
+    const d=dispo(m,t);
+    const v=jVendu(m.nom,t);
+    const r=jRes(m.nom,t);
+    const e=jExp(m.nom,t);
+    const s=parseInt(m.stock[t])||1;
+    return {nom:m.nom,s,v,r,e,d};
+  }).sort((a,b)=>b.d-a.d);
+
+  vue.innerHTML=`
+    <div style="margin-bottom:10px;font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:var(--pink)">
+      Disponibilité taille <b>${t}</b>
+    </div>
+    <table class="rtable">
+      <thead><tr>
+        <th style="text-align:left">Modèle</th>
+        <th>Stock init.</th>
+        <th>🛒 Vendus</th>
+        <th>🔖 Réservés</th>
+        <th>📦 Expédiés</th>
+        <th>✅ Dispo</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td style="text-align:left;font-weight:700">${r.nom}</td>
+          <td>${r.s}</td>
+          <td style="color:#2D7A4F;font-weight:700">${r.v}</td>
+          <td style="color:#1565C0;font-weight:700">${r.r}</td>
+          <td style="color:#5E35B1;font-weight:700">${r.e}</td>
+          <td style="color:${r.d<=0?'#B52828':r.d<=1?'#C45E1A':'#2D7A4F'};font-weight:800;font-size:16px">${r.d}</td>
+        </tr>`).join('')}
+        <tr class="tr-total">
+          <td style="text-align:left">TOTAL</td>
+          <td>${rows.reduce((s,r)=>s+r.s,0)}</td>
+          <td>${rows.reduce((s,r)=>s+r.v,0)}</td>
+          <td>${rows.reduce((s,r)=>s+r.r,0)}</td>
+          <td>${rows.reduce((s,r)=>s+r.e,0)}</td>
+          <td style="color:#fff;font-weight:800">${rows.reduce((s,r)=>s+r.d,0)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
 function renderStock(){
   const q=document.getElementById('searchInput').value.toLowerCase();
-  const filtered=DATA.filter(m=>m.nom.toLowerCase().includes(q));
+  const NOMS=["Verdana","Ivory Dune","Léopard Chic","Modèle Riviera","Black Wave","Blue Sea","Modèle Infinity","Modèle Mejestic","Orchidée Royale","Perla Noire","Marvea","Azura","Navy Oasis","Playa"];
   const grid=document.getElementById('modelsGrid');
+
+  // Vue par taille (filtre par taille sélectionnée)
+  const tailleFilter=document.getElementById('tailleFilter')?document.getElementById('tailleFilter').value:'';
+
+  // Si pas de DATA (vide), reconstruire depuis les noms connus
+  const modeles = DATA.length>0 ? DATA : NOMS.map(nom=>({nom,stock:Object.fromEntries(TAILLES.map(t=>[t,1]))}));
+  const filtered = modeles.filter(m=>m.nom.toLowerCase().includes(q));
+
   if(!filtered.length){grid.innerHTML='<div class="empty">Aucun modèle trouvé.</div>';return;}
+
   grid.innerHTML=filtered.map(m=>{
-    const ri=DATA.indexOf(m);
-    const ts=tStock(m);
-    const d=tDispo(m);
-    const meta=getMeta(m.nom);
+    const ri=modeles.indexOf(m);
+    const dispoPt=TAILLES.map(t=>({t,d:dispo(m,t)}));
+    const totalDispo=dispoPt.reduce((s,x)=>s+x.d,0);
 
-    const photoHTML="";
+    // Badge statut
+    let badge='';
+    if(totalDispo<=0) badge='<span class="badge b-out">Rupture</span>';
+    else if(totalDispo<=3) badge='<span class="badge b-low">Stock faible</span>';
+    else badge='<span class="badge b-ok">Disponible</span>';
 
+    // Tailles disponibles
     const taillesHTML=TAILLES.map(t=>{
       const dp=dispo(m,t);
-      return `<div class="taille-cell"><div class="t-label">${t}</div><div class="t-dispo ${tClass(dp)}">${dp}</div></div>`;
+      const v=jVendu(m.nom,t);
+      const r=jRes(m.nom,t);
+      const e=jExp(m.nom,t);
+      const cls=dp<=0?'t-out':dp<=1?'t-low':'t-ok';
+      return `<div class="taille-cell">
+        <div class="t-label">${t}</div>
+        <div class="t-dispo ${cls}">${dp}</div>
+        <div style="font-size:9px;color:var(--gray);margin-top:2px">
+          ${v>0?`🛒${v} `:''}${r>0?`🔖${r} `:''}${e>0?`📦${e}`:''}
+        </div>
+      </div>`;
     }).join('');
 
+    // Detail
     const detailHTML=`
       <div class="detail-section" id="detail-${ri}">
         <div class="d-label-row"><div></div>${TAILLES.map(t=>`<div style="text-align:center;font-size:10px;font-weight:700;color:var(--gray)">${t}</div>`).join('')}</div>
         <div class="d-row">
-          <div class="d-row-label" style="color:var(--pink)">📦 Stock</div>
-          ${TAILLES.map(t=>`<input class="d-input" type="number" min="0" value="${m.stock[t]}" onchange="upd(${ri},'stock','${t}',this.value)">`).join('')}
+          <div class="d-row-label" style="color:var(--pink)">📦 Stock init.</div>
+          ${TAILLES.map(t=>`<input class="d-input" type="number" min="0" value="${m.stock[t]||1}" onchange="upd(${ri},'${t}',this.value)">`).join('')}
         </div>
         <div class="d-row">
-          <div class="d-row-label" style="color:var(--pink)">🛒 Vendus</div>
-          ${TAILLES.map(t=>`<input class="d-input v" type="number" min="0" value="${m.vendu[t]}" onchange="upd(${ri},'vendu','${t}',this.value)">`).join('')}
+          <div class="d-row-label" style="color:#2D7A4F">🛒 Vendus</div>
+          ${TAILLES.map(t=>`<div class="d-input" style="background:#E8F5EE;color:#2D7A4F;display:flex;align-items:center;justify-content:center">${jVendu(m.nom,t)}</div>`).join('')}
         </div>
         <div class="d-row">
-          <div class="d-row-label" style="color:var(--pink2)">🔖 Réservés</div>
-          ${TAILLES.map(t=>`<input class="d-input r" type="number" min="0" value="${m.reserve[t]}" onchange="upd(${ri},'reserve','${t}',this.value)">`).join('')}
+          <div class="d-row-label" style="color:#1565C0">🔖 Réservés</div>
+          ${TAILLES.map(t=>`<div class="d-input" style="background:#E3F0FC;color:#1565C0;display:flex;align-items:center;justify-content:center">${jRes(m.nom,t)}</div>`).join('')}
+        </div>
+        <div class="d-row">
+          <div class="d-row-label" style="color:#5E35B1">📦 Expédiés</div>
+          ${TAILLES.map(t=>`<div class="d-input" style="background:#EDE7F6;color:#5E35B1;display:flex;align-items:center;justify-content:center">${jExp(m.nom,t)}</div>`).join('')}
+        </div>
+        <div class="d-row">
+          <div class="d-row-label" style="color:#2D7A4F;font-weight:800">✅ Dispo</div>
+          ${TAILLES.map(t=>{const d=dispo(m,t);return `<div class="d-input" style="background:${d<=0?'#FDEAEA':d<=1?'#FEF0E6':'#E8F5EE'};color:${d<=0?'#B52828':d<=1?'#C45E1A':'#2D7A4F'};font-weight:800;display:flex;align-items:center;justify-content:center">${d}</div>`;}).join('')}
         </div>
       </div>`;
 
     return `
     <div class="model-card">
       <div class="card-head">
-        ${photoHTML}
         <div class="card-head-info">
           <div class="card-name">${m.nom}</div>
-          ${statutBadge(m)}
+          ${badge}
         </div>
       </div>
       <div class="card-body">
@@ -468,11 +560,11 @@ function renderStock(){
         ${detailHTML}
         <div class="card-foot">
           <div class="chips">
-            <span class="chip ch-s">📦 ${ts}</span>
-            <span class="chip ch-v">🛒 ${tVendu(m)}</span>
-            <span class="chip ch-r">🔖 ${tRes(m)}</span>
-            <span class="chip" style="background:#EDE7F6;color:#5E35B1">📦 ${tExp(m)}</span>
-            <span class="chip ch-d ${tDispo(m)<=0?'zero':''}">✅ ${tDispo(m)} dispo</span>
+            <span class="chip ch-s">📦 ${tStock(m)} init.</span>
+            <span class="chip ch-v">🛒 ${tVendu(m)} vendus</span>
+            <span class="chip ch-r">🔖 ${tRes(m)} rés.</span>
+            <span class="chip" style="background:#EDE7F6;color:#5E35B1">📦 ${tExp(m)} exp.</span>
+            <span class="chip ch-d ${totalDispo<=0?'zero':''}">✅ ${totalDispo} dispo</span>
           </div>
           <button class="btn-detail" id="btn-${ri}" onclick="toggleDetail(${ri})">▾ Détail</button>
         </div>
@@ -480,6 +572,7 @@ function renderStock(){
     </div>`;
   }).join('');
 }
+
 
 window.toggleDetail=function(ri){
   const sec=document.getElementById('detail-'+ri);
